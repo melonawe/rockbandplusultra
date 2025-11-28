@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rock Legends · 트렌드 검색</title>
+  <link rel="stylesheet" href="rockband_expanded.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">ROCK LEGENDS</div>
+    <nav class="nav">
+      <a href="rockbandlegend_expanded.html">Home</a>
+      <a href="music_trend_unified.html" style="text-decoration:underline">Trends</a>
+      <span class="country-label" id="countryLabel">Country: All</span>
+      <div class="country-menu" id="countryMenu">
+        <div>All</div>
+        <div>UK</div>
+        <div>US</div>
+        <div>JP</div>
+        <div>Ita</div>
+      </div>
+    </nav>
+  </div>
+
+  <main class="main container">
+    <section class="section" id="searchSection">
+      <h2>밴드 검색</h2>
+      <div class="controls">
+        <input type="text" id="searchInput" class="input" placeholder="밴드 이름을 입력하세요" />
+        <button id="searchBtn" class="btn">검색</button>
+      </div>
+      <div id="searchResults" class="pills" style="margin-top:14px;"></div>
+      <div class="badge" style="margin-top:10px;">Spotify + 커스텀 약력</div>
+    </section>
+
+    <section class="section" id="bandInfoSection" style="display:none;">
+      <h2 id="bandName">밴드 정보</h2>
+      <div id="bandBio" class="card" style="padding:14px;"></div>
+    </section>
+
+    <section class="section" id="trendSection">
+      <h2>Spotify 트렌드 그래프</h2>
+      <div class="chart-wrap">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    © 1970-2025 Rock Legends · Contact · About · Social
+    <div class="muted">이 페이지는 Rock Legends UI 테마를 공유합니다.</div>
+  </footer>
+
+<script>
+  // Country menu (kept for consistent UI; not used by trend logic)
+  const countryMenu = document.getElementById('countryMenu');
+  const countryLabel = document.getElementById('countryLabel');
+  let selectedCountry = null;
+  document.getElementById('navCountry').addEventListener('click', (e)=>{
+    e.preventDefault();
+    countryMenu.style.display = countryMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  countryMenu.querySelectorAll('div').forEach(opt=>{
+    opt.addEventListener('click',()=>{
+      selectedCountry = (opt.textContent === "All") ? null : opt.textContent;
+      countryLabel.textContent = "Country: " + opt.textContent;
+      countryMenu.style.display = 'none';
+    });
+  });
+
+  // === Trend Page Logic ===
+  const SPOTIFY_TOKEN = "여기에_본인_액세스_토큰_입력"; // 실제 토큰으로 교체하세요
+
+  // 커스텀 약력: 필요시 여기서 편집
+  const bandBios = {
+    "Coldplay": "Coldplay는 영국의 록 밴드로, 감성적인 멜로디와 서정적인 가사로 전 세계적인 사랑을 받고 있습니다.",
+    "Muse": "Muse는 영국의 얼터너티브 록 밴드로, 실험적인 사운드와 사회적 메시지로 유명합니다.",
+    "BTS": "BTS(방탄소년단)는 한국의 7인조 보이밴드로, 음악과 퍼포먼스로 글로벌 팬덤을 형성했습니다.",
+    "Nirvana": "Nirvana는 1990년대 그란지 록의 대표 밴드로, 전설적인 음악성과 영향력을 남겼습니다."
+  };
+
+  const searchBtn = document.getElementById("searchBtn");
+  const searchInput = document.getElementById("searchInput");
+  const resultsDiv = document.getElementById("searchResults");
+
+  searchBtn.addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter") doSearch();
+  });
+
+  async function doSearch(){
+    const query = searchInput.value.trim();
+    if(!query){ alert("검색어를 입력하세요!"); return; }
+    resultsDiv.innerHTML = "<span class='badge'>검색 중...</span>";
+    try {
+      const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=5`, {
+        headers: { Authorization: `Bearer ${SPOTIFY_TOKEN}` }
+      });
+      const data = await res.json();
+      const artists = (data.artists && data.artists.items) ? data.artists.items : [];
+      resultsDiv.innerHTML = "";
+      if(artists.length === 0){
+        resultsDiv.innerHTML = "<div class='empty'>검색 결과가 없습니다.</div>";
+        return;
+      }
+      artists.forEach(artist => {
+        const div = document.createElement("div");
+        div.className = "artist-item pill";
+        div.textContent = artist.name;
+        div.addEventListener("click", () => showBandInfo(artist.name));
+        resultsDiv.appendChild(div);
+      });
+    } catch (err){
+      resultsDiv.innerHTML = "<div class='empty'>검색 실패. 토큰 또는 네트워크를 확인하세요.</div>";
+    }
+  }
+
+  function showBandInfo(bandName){
+    document.getElementById("bandInfoSection").style.display = "block";
+    document.getElementById("bandName").textContent = bandName;
+    document.getElementById("bandBio").innerHTML = "<div class='body'>" + (bandBios[bandName] || "이 밴드의 약력이 아직 등록되지 않았습니다. bandBios 객체에 추가해주세요.") + "</div>";
+    drawTrendChart(bandName);
+  }
+
+  let chartInstance = null;
+  function drawTrendChart(bandName){
+    const ctx = document.getElementById("trendChart").getContext("2d");
+    const months = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+    const trendData = months.map(() => Math.floor(Math.random() * 100));
+
+    if(chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: months,
+        datasets: [{
+          label: bandName + " 트렌드 지수",
+          data: trendData,
+          borderColor: "rgba(255, 215, 0, 1)",
+          backgroundColor: "rgba(255, 215, 0, 0.15)",
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          x: { grid: { color: "rgba(255,255,255,0.08)" } },
+          y: { beginAtZero: true, grid: { color: "rgba(255,255,255,0.08)" } }
+        }
+      }
+    });
+  }
+</script>
+</body>
+</html>
